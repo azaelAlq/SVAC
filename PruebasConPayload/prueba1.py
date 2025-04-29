@@ -7,8 +7,8 @@ import requests
 # ========================
 # Configuración del ESP32-CAM
 # ========================
-ESP32_CAM_VIDEO_URL = "http://192.168.2.94/video"
-ESP32_CAM_BASE_URL = "http://192.168.2.94"
+ESP32_CAM_VIDEO_URL = "http://10.247.102.94/video"
+ESP32_CAM_BASE_URL = "http://10.247.102.94"
 
 # ========================
 # Parámetros de visión
@@ -83,8 +83,8 @@ def deteccion_conos():
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         
         #Ajuste de parametros de color
-        lower_yellow = np.array([16, 62, 163])
-        upper_yellow = np.array([130, 255, 255])
+        lower_yellow = np.array([28, 69, 100])
+        upper_yellow = np.array([35, 255, 255])
         
         mask_yellow = cv2.inRange(hsv, lower_yellow, upper_yellow)
 

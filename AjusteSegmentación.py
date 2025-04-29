@@ -2,9 +2,9 @@ import cv2
 import numpy as np
 
 # URL del stream de la ESP32-CAM
-ESP32_CAM_URL = "http://192.168.2.94/video"
+ESP32_CAM_URL = "http://10.29.60.94/video"
 
-# Función para imprimir los valores actuales
+# Función para imprimir los valores actualesy
 def imprimir_valores():
     h_min = cv2.getTrackbarPos("H Min", "Ajustes Amarillo")
     s_min = cv2.getTrackbarPos("S Min", "Ajustes Amarillo")

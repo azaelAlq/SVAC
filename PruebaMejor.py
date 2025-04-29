@@ -18,7 +18,7 @@ ultima_frame = None
 def enviar_comando(ruta):
     url = f"{ESP32_CAM_BASE_URL}/{ruta}"
     try:
-        requests.get(url, timeout=0.5)
+        requests.get(url, timeout=0.1)
         log_evento(f"Comando: {ruta}")
     except Exception as e:
         log_evento(f"Comando: {ruta}")
@@ -93,7 +93,6 @@ def detectar_conos_y_control():
         return
 
     while True:
-
         ret, frame = cap.read()
         if not ret:
             continue
@@ -108,8 +107,9 @@ def detectar_conos_y_control():
         ultima_frame = frame.copy()
 
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        lower_yellow = np.array([19, 45, 100])
-        upper_yellow = np.array([35, 255, 255])        
+        lower_yellow = np.array([20, 100, 100])
+        upper_yellow = np.array([35, 255, 255])
+
         mask_yellow = cv2.inRange(hsv, lower_yellow, upper_yellow)
         contours, _ = cv2.findContours(mask_yellow, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -139,14 +139,14 @@ def detectar_conos_y_control():
                     log_evento("¡Cono cercano! Detenerse y retirar.")
                     time.sleep(3)
                 elif centro_cono < 250:
-                    mover("izquierda", 0.7)
+                    mover("izquierda", 0.0)
                 elif centro_cono > 390:
-                    mover("derecha", 0.7)
+                    mover("derecha", 0.0)
                 else:
-                    mover("adelante", 2)
+                    mover("adelante", 0)
         else:
             if modo_autonomo_activado:
-                mover("giro", 0.7)
+                mover("giro", 0.0)
 
         # Mostrar video
         img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
