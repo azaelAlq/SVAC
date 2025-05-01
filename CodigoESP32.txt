@@ -1,0 +1,107 @@
+# Código reducido solo para inicializar la cámara y hacer streaming
+import picoweb
+import utime
+import camera
+import gc
+from machine import Pin
+
+SSID = "✓-1phone de azael"       # Tu red WiFi
+PASSWORD = "internetyo"          # Tu contraseña
+
+led = Pin(13, Pin.OUT)
+
+# Conexión WiFi
+def wifi_connect():
+    import network
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    if not wlan.isconnected():
+        print('Conectando a la red WiFi...')
+        wlan.connect(SSID, PASSWORD) 
+    start = utime.time()
+    while not wlan.isconnected():
+        utime.sleep(1)
+        if utime.time() - start > 5:
+            print("Tiempo de conexión agotado.")
+            break
+    if wlan.isconnected():
+        print('Conectado! Configuración de red:', wlan.ifconfig())
+
+# Inicializar cámara
+def camera_init():
+    camera.deinit()
+    camera.init(0, d0=4, d1=5, d2=18, d3=19, d4=36, d5=39, d6=34, d7=35,
+                format=camera.JPEG, framesize=camera.FRAME_VGA, 
+                xclk_freq=camera.XCLK_20MHz,
+                href=23, vsync=25, reset=-1, pwdn=-1,
+                sioc=27, siod=26, xclk=21, pclk=22, fb_location=camera.PSRAM)
+
+    camera.framesize(camera.FRAME_VGA)
+    camera.flip(1)
+    camera.mirror(0)
+    camera.saturation(0)
+    camera.brightness(0)
+    camera.contrast(0)
+    camera.quality(30)
+    camera.speffect(camera.EFFECT_NONE)
+    camera.whitebalance(camera.WB_NONE)
+
+# Página HTML
+index_web = """
+HTTP/1.0 200 OK\r\n
+<html>
+  <head>
+    <title>Video Streaming</title>
+  </head>
+  <body>
+    <h1>Video Streaming</h1>
+    <img src="/video" style="transform:rotate(180deg); margin-top:100px;" />
+  </body>
+</html>
+"""
+
+# Manejador de index
+def index(req, resp):
+    yield from resp.awrite(index_web)
+
+# Enviar imagenes de la cámara
+def send_frame():
+    buf = camera.capture()
+    yield (b'--frame\r\n'
+           b'Content-Type: image/jpeg\r\n\r\n'
+           + buf + b'\r\n')
+    del buf
+    gc.collect()
+
+# Stream de video
+def video(req, resp):
+    yield from picoweb.start_response(resp, content_type="multipart/x-mixed-replace; boundary=frame")
+    while True:
+        yield from resp.awrite(next(send_frame()))
+        gc.collect()
+
+# Encender LED de estado
+def iniciar_sistema():
+    for _ in range(3):
+        led.value(1)
+        utime.sleep_ms(400)
+        led.value(0)
+        utime.sleep_ms(200)
+
+ROUTES = [
+    ("/", index),
+    ("/video", video),
+]
+
+if __name__ == '__main__':
+    import ulogging as logging
+    logging.basicConfig(level=logging.INFO)
+
+    iniciar_sistema()
+    camera_init()
+    wifi_connect()
+    iniciar_sistema()
+
+    app = picoweb.WebApp(__name__, ROUTES)
+    app.run(debug=1, port=80, host="0.0.0.0")
+

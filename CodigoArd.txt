@@ -1,0 +1,163 @@
+#include <WiFiS3.h>
+
+const char ssid[] = "✓-1phone de azael";
+const char pass[] = "internetyo";
+
+int status = WL_IDLE_STATUS;
+
+WiFiServer server(80);
+
+bool isOn = false;
+
+// Pines de motor
+const int in1 = 8;
+const int in2 = 7;
+const int in3 = 12;
+const int in4 = 13;
+const int ledIndicador = 4;
+
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(in1, OUTPUT);
+  pinMode(in2, OUTPUT);
+  pinMode(in3, OUTPUT);
+  pinMode(in4, OUTPUT);
+  pinMode(ledIndicador, OUTPUT);
+
+  String fv = WiFi.firmwareVersion();
+  if (fv < WIFI_FIRMWARE_LATEST_VERSION)
+    Serial.println("Please upgrade the firmware");
+
+  while (status != WL_CONNECTED) {
+    Serial.print("Attempting to connect to SSID: ");
+    Serial.println(ssid);
+    status = WiFi.begin(ssid, pass);
+    delay(10000);
+  }
+  server.begin();
+  printWifiStatus();
+}
+
+void detenerMotores() {
+  digitalWrite(in1, LOW);
+  digitalWrite(in2, LOW);
+  digitalWrite(in3, LOW);
+  digitalWrite(in4, LOW);
+}
+
+void mover(String accion, int duracion = 1000) {
+  detenerMotores();
+
+  if (accion == "adelante") {
+    digitalWrite(in3, HIGH);
+    digitalWrite(in1, HIGH);
+  } else if (accion == "atras") {
+    digitalWrite(in2, HIGH);
+    digitalWrite(in4, HIGH);
+  } else if (accion == "izquierda") {
+    digitalWrite(in3, HIGH);
+  } else if (accion == "derecha") {
+    digitalWrite(in1, HIGH);
+  } else if (accion == "giro") {
+    digitalWrite(in1, HIGH);
+    digitalWrite(in4, HIGH);
+  }
+
+  delay(duracion);
+  detenerMotores();
+}
+
+void parpadearLed() {
+  digitalWrite(ledIndicador, HIGH);
+  delay(200);
+  digitalWrite(ledIndicador, LOW);
+}
+
+void loop() {
+  WiFiClient client = server.available();
+  if (client) {
+    String request = "";
+    while (client.connected()) {
+      if (client.available()) {
+        char c = client.read();
+        request += c;
+        if (c == '\n' && request.endsWith("\r\n\r\n")) {
+          break;
+        }
+      }
+    }
+
+    parpadearLed(); // 🔴 Indica que se recibió una solicitud
+
+    // Variables para controlar el tiempo de movimiento
+    int duracion = 1000;  // Valor por defecto de duración (1 segundo)
+    
+    // Buscar el parámetro "duracion" en la URL
+    int startIndex = request.indexOf("duracion=");
+    if (startIndex >= 0) {
+      String duracionStr = request.substring(startIndex + 9); // Obtener la parte después de "duracion="
+      duracion = duracionStr.toInt(); // Convertir la duración a entero
+    }
+
+    // Control de motores desde URL
+    if (request.indexOf("GET /motor/adelante") >= 0) {
+      mover("adelante", duracion);
+    } else if (request.indexOf("GET /motor/atras") >= 0) {
+      mover("atras", duracion);
+    } else if (request.indexOf("GET /motor/izquierda") >= 0) {
+      mover("izquierda", duracion);
+    } else if (request.indexOf("GET /motor/derecha") >= 0) {
+      mover("derecha", duracion);
+    } else if (request.indexOf("GET /motor/giro") >= 0) {
+      mover("giro", duracion);
+    }
+
+    // Enviar respuesta HTTP
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: text/html");
+    client.println("Connection: close");
+    client.println();
+    client.println("<!DOCTYPE HTML><html>");
+    client.println("<h2>Control de Motores</h2>");
+
+    // Formulario para controlar los motores con duración
+    client.println("<form action='/motor/adelante' method='get'>");
+    client.println("<p>Adelante Duración (ms): <input type='number' name='duracion' value='1000' min='100' /></p>");
+    client.println("<p><input type='submit' value='Adelante'></p>");
+    client.println("</form>");
+
+    client.println("<form action='/motor/atras' method='get'>");
+    client.println("<p>Atrás Duración (ms): <input type='number' name='duracion' value='1000' min='100' /></p>");
+    client.println("<p><input type='submit' value='Atrás'></p>");
+    client.println("</form>");
+
+    client.println("<form action='/motor/izquierda' method='get'>");
+    client.println("<p>Izquierda Duración (ms): <input type='number' name='duracion' value='1000' min='100' /></p>");
+    client.println("<p><input type='submit' value='Izquierda'></p>");
+    client.println("</form>");
+
+    client.println("<form action='/motor/derecha' method='get'>");
+    client.println("<p>Derecha Duración (ms): <input type='number' name='duracion' value='1000' min='100' /></p>");
+    client.println("<p><input type='submit' value='Derecha'></p>");
+    client.println("</form>");
+
+    client.println("<form action='/motor/giro' method='get'>");
+    client.println("<p>Giro Duración (ms): <input type='number' name='duracion' value='1000' min='100' /></p>");
+    client.println("<p><input type='submit' value='Giro'></p>");
+    client.println("</form>");
+    
+    client.println("</html>");
+
+    delay(10);
+    client.stop();
+  }
+}
+
+void printWifiStatus() {
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+  Serial.print("signal strength (RSSI):");
+  Serial.print(WiFi.RSSI());
+  Serial.println(" dBm");
+}
