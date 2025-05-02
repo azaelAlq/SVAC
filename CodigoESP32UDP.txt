@@ -1,0 +1,83 @@
+import camera
+import gc
+import utime
+import socket
+from machine import Pin
+
+# Configuración
+DEST_IP = '10.29.60.218'  # IP de tu computadora cliente
+DEST_PORT = 5005           # Puerto UDP destino
+CHUNK_SIZE = 1024          # Tamaño de fragmento UDP
+
+led = Pin(13, Pin.OUT)
+
+def wifi_connect():
+    import network
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    if not wlan.isconnected():
+        wlan.connect("✓-1phone de azael", "internetyo")
+        start = utime.time()
+        while not wlan.isconnected():
+            if utime.time() - start > 10:
+                print("No se pudo conectar al WiFi")
+                return
+            utime.sleep(1)
+    print("Conectado:", wlan.ifconfig())
+
+def camera_init():
+    camera.deinit()
+    camera.init(0, d0=4, d1=5, d2=18, d3=19, d4=36, d5=39, d6=34, d7=35,
+                format=camera.JPEG, framesize=camera.FRAME_VGA, 
+                xclk_freq=camera.XCLK_20MHz,
+                href=23, vsync=25, reset=-1, pwdn=-1,
+                sioc=27, siod=26, xclk=21, pclk=22, fb_location=camera.PSRAM)
+
+    camera.framesize(camera.FRAME_VGA)
+    camera.flip(1)
+    camera.mirror(0)
+    camera.saturation(0)
+    camera.brightness(0)
+    camera.contrast(0)
+    camera.quality(20)
+    camera.speffect(camera.EFFECT_NONE)
+    camera.whitebalance(camera.WB_NONE)
+
+def iniciar_sistema():
+    for _ in range(3):
+        led.value(1)
+        utime.sleep_ms(300)
+        led.value(0)
+        utime.sleep_ms(200)
+
+def send_udp_image():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    while True:
+        gc.collect()
+        buf = camera.capture()
+        if not buf:
+            print("Error al capturar imagen. Reiniciando...")
+            utime.sleep(1)
+            continue
+        
+        # Enviar por partes
+        total_len = len(buf)
+        for i in range(0, total_len, CHUNK_SIZE):
+            part = buf[i:i+CHUNK_SIZE]
+            try:
+                sock.sendto(part, (DEST_IP, DEST_PORT))
+            except OSError as e:
+                print("Error al enviar UDP:", e)
+                break
+
+        del buf
+        gc.collect()
+        utime.sleep_ms(150)
+
+if __name__ == "__main__":
+    iniciar_sistema()
+    wifi_connect()
+    camera_init()
+    iniciar_sistema()
+    send_udp_image()
+
