@@ -65,28 +65,33 @@ def mostrar_video_udp():
 
                     # Detección de color amarillo
                     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-
                     mask = cv2.inRange(hsv, lower_yellow, upper_yellow)
+
+                    # Morfología para limpiar la máscara
+                    kernel = np.ones((5, 5), np.uint8)
+                    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+                    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+
                     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-                    
                     for cnt in contours:
                         area = cv2.contourArea(cnt)
                         if area > 300:
                             x, y, w, h = cv2.boundingRect(cnt)
 
-                            # Estimar distancia
+                            # Estimar distancia con posible corrección empírica
                             ALTURA_CONO_REAL_CM = 9
-                            DISTANCIA_FOCAL = 550  # Ajusta esta constante según pruebas reales
-                            distancia_cm = (ALTURA_CONO_REAL_CM * DISTANCIA_FOCAL) / h
+                            DISTANCIA_FOCAL = 550
+                            h_corregida = h * 1.10  # Puedes ajustar este factor si hace falta
+                            distancia_cm = (ALTURA_CONO_REAL_CM * DISTANCIA_FOCAL) / h_corregida
 
-                            # Dibujar rectángulo y textos
+                            # Dibujar resultados
                             cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 255), 2)
-                            cv2.putText(frame, "Cono", (x, y - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-                            cv2.putText(frame, f"{distancia_cm:.1f} cm", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                            cv2.putText(frame, "Cono", (x, y - 40), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                            cv2.putText(frame, f"h={h}, w={w}", (x, y - 25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 200, 200), 1)
+                            cv2.putText(frame, f"d={distancia_cm:.1f} cm", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
 
                     # Mostrar imagen en Tkinter
-                    #img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     img_rgb = frame.copy()
                     img_tk = cv2.imencode('.ppm', img_rgb)[1].tobytes()
                     photo = tk.PhotoImage(data=img_tk)
@@ -102,7 +107,7 @@ def mostrar_video_udp():
         except Exception as e:
             log_evento(f"Error de recepción: {e}")
             image_data = b""
-    
+
     
 
 # Interfaz principal
