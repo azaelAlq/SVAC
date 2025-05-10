@@ -11,7 +11,7 @@ import time
 UDP_IP = "0.0.0.0"
 UDP_PORT = 5005
 CHUNK_SIZE = 1024
-ESP32_MOTORES_BASE_URL = "http://10.29.60.104"
+ESP32_MOTORES_BASE_URL = "http://192.168.134.104"
 
 lower_yellow = np.array([18, 80, 78])
 upper_yellow = np.array([43, 255, 255])
@@ -27,7 +27,7 @@ modo_automatico = False
 tiempo_espera_movimiento = 1.5  # segundos
 frame_actual = None
 mutex = Lock()
-
+s
 # Inicializa socket UDP
 def iniciar_socket_udp():
     global sock
@@ -166,9 +166,9 @@ def modo_autonomo():
             mover("derecha", 150)
         else:
             if distancia_cm > 25:
-                mover("adelante", 1000)
-            else:
                 mover("adelante", 500)
+            else:
+                mover("adelante", 300)
 
         time.sleep(tiempo_espera_movimiento)
 

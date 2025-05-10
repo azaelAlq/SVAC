@@ -1,0 +1,84 @@
+cam: 10.29.60.94
+motores: 10.29.60.104
+
+
+codigo de prueba para server en Arduino:
+#include <WiFiS3.h>
+
+const char ssid[] = "✓-1phone de azael";  // Cambia el SSID
+const char pass[] = "internetyo";         // Cambia la contraseña
+
+int status = WL_IDLE_STATUS;
+
+WiFiServer server(80);
+
+bool isOn = false;  // Estado del encendido
+
+void setup() {
+  Serial.begin(9600);
+
+  String fv = WiFi.firmwareVersion();
+  if (fv < WIFI_FIRMWARE_LATEST_VERSION)
+    Serial.println("Please upgrade the firmware");
+
+  while (status != WL_CONNECTED) {
+    Serial.print("Attempting to connect to SSID: ");
+    Serial.println(ssid);
+    status = WiFi.begin(ssid, pass);
+    delay(10000);
+  }
+  server.begin();
+  printWifiStatus();
+}
+
+void loop() {
+  WiFiClient client = server.available();
+  if (client) {
+    String request = "";
+    while (client.connected()) {
+      if (client.available()) {
+        char c = client.read();
+        request += c;
+        if (c == '\n' && request.endsWith("\r\n\r\n")) {
+          break;
+        }
+      }
+    }
+
+    // Determinar la ruta solicitada
+    if (request.indexOf("GET /on") >= 0) {
+      isOn = true;
+      Serial.println("Estado: ENCENDIDO");
+    } else if (request.indexOf("GET /off") >= 0) {
+      isOn = false;
+      Serial.println("Estado: APAGADO");
+    }
+
+    // Enviar respuesta HTTP
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: text/html");
+    client.println("Connection: close");
+    client.println();
+    client.println("<!DOCTYPE HTML>");
+    client.println("<html>");
+    client.println("<head><link rel=\"icon\" href=\"data:,\"></head>");
+    client.println("<body>");
+    client.print("<h2>Estado actual: ");
+    client.print(isOn ? "<span style='color:green;'>ENCENDIDO</span>" : "<span style='color:red;'>APAGADO</span>");
+    client.println("</h2>");
+    client.println("<p><a href=\"/on\">Encender</a> | <a href=\"/off\">Apagar</a></p>");
+    client.println("</body>");
+    client.println("</html>");
+
+    delay(10);
+    client.stop();
+  }
+}
+
+void printWifiStatus() {
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+  Serial.print("signal strength (RSSI):");
+  Serial.print(WiFi.RSSI());
+  Serial.println(" dBm");
+}

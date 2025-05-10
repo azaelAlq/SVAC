@@ -1,0 +1,215 @@
+# This section uses firmware from Lemariva's Micropython-camera-driver.  
+# for details, please refer to: https://github.com/lemariva/micropython-camera-driver  
+import picoweb
+import utime
+import camera
+import gc
+from machine import Pin
+import ure  # ya viene con MicroPython, es como 're' (regex)
+import time
+from machine import PWM
+
+SSID = "✓-1phone de azael"       # Enter your WiFi name
+PASSWORD = "internetyo"    # Enter your WiFi password
+
+# Define pines para motores
+in1 = Pin(12, Pin.OUT)
+in2 = Pin(14, Pin.OUT)
+in3 = Pin(33, Pin.OUT)
+in4 = Pin(32, Pin.OUT)
+led = Pin(13, Pin.OUT)
+
+in1.value(0)
+in2.value(0)
+in3.value(0)
+in4.value(0)
+
+ena = PWM(Pin(15), freq=1000)
+enb = PWM(Pin(2), freq=1000)
+
+# Velocidad máxima (duty=1023)
+ena.duty(1023)
+enb.duty(1023)
+
+# Let ESP32 connect to wifi.
+def wifi_connect():
+    import network
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    if not wlan.isconnected():
+        print('connecting to network...')
+        wlan.connect(SSID, PASSWORD) 
+    start = utime.time()
+    while not wlan.isconnected():
+        utime.sleep(1)
+        if utime.time()-start > 5:
+            print("connect timeout!")
+            break
+    if wlan.isconnected():
+        print('network config:', wlan.ifconfig())
+
+# Initializing the Camera
+def camera_init():
+    # Disable camera initialization
+    camera.deinit()
+    # Enable camera initialization
+    camera.init(0, d0=4, d1=5, d2=18, d3=19, d4=36, d5=39, d6=34, d7=35,
+                format=camera.JPEG, framesize=camera.FRAME_VGA, 
+                xclk_freq=camera.XCLK_20MHz,
+                href=23, vsync=25, reset=-1, pwdn=-1,
+                sioc=27, siod=26, xclk=21, pclk=22, fb_location=camera.PSRAM)
+
+    camera.framesize(camera.FRAME_VGA) # Set the camera resolution
+    # The options are the following:
+    # FRAME_96X96 FRAME_QQVGA FRAME_QCIF FRAME_HQVGA FRAME_240X240
+    # FRAME_QVGA FRAME_CIF FRAME_HVGA FRAME_VGA FRAME_SVGA
+    # FRAME_XGA FRAME_HD FRAME_SXGA FRAME_UXGA
+    # Note: The higher the resolution, the more memory is used.
+    # Note: And too much memory may cause the program to fail.
+    
+    camera.flip(1)                       # Flip up and down window: 0-1
+    camera.mirror(0)                     # Flip window left and right: 0-1
+    camera.saturation(0)                 # saturation: -2,2 (default 0). -2 grayscale 
+    camera.brightness(0)                 # brightness: -2,2 (default 0). 2 brightness
+    camera.contrast(0)                   # contrast: -2,2 (default 0). 2 highcontrast
+    camera.quality(30)                   # quality: # 10-63 lower number means higher quality
+    # Note: The smaller the number, the sharper the image. The larger the number, the more blurry the image
+    
+    camera.speffect(camera.EFFECT_NONE)  # special effects:
+    # EFFECT_NONE (default) EFFECT_NEG EFFECT_BW EFFECT_RED EFFECT_GREEN EFFECT_BLUE EFFECT_RETRO
+    camera.whitebalance(camera.WB_NONE)  # white balance
+    # WB_NONE (default) WB_SUNNY WB_CLOUDY WB_OFFICE WB_HOME
+
+# HTTP Response Content  
+index_web="""
+HTTP/1.0 200 OK\r\n
+<html>
+  <head>
+    <title>Video Streaming</title>
+  </head>
+  <body>
+    <h1>Video Streaming Demonstration</h1>
+    <img src="/video" margin-top:100px; style="transform:rotate(180deg)"; />
+  </body>
+</html>
+"""
+
+# HTTP Response
+def index(req, resp):
+    # You can construct an HTTP response completely yourself, having
+    yield from resp.awrite(index_web)
+
+# Send camera pictures
+def send_frame():
+    buf = camera.capture()
+    yield (b'--frame\r\n'
+           b'Content-Type: image/jpeg\r\n\r\n'
+           + buf + b'\r\n')
+    del buf
+    gc.collect()
+        
+# Video transmission
+def video(req, resp):
+    yield from picoweb.start_response(resp, content_type="multipart/x-mixed-replace; boundary=frame")
+    while True:
+        yield from resp.awrite(next(send_frame()))
+        gc.collect()
+
+def led_blink():
+    led.value(1)
+    utime.sleep_ms(100)  # Enciende por 100ms
+    led.value(0)
+    
+def iniciar_sistema():
+    # Parpadeo del LED para indicar que está listo
+    for _ in range(3):
+        led.value(1)
+        utime.sleep_ms(400)
+        led.value(0)
+        utime.sleep_ms(200)
+        
+    
+# Encendido/apagado simple de pines
+async def set_pin(req, resp, pin, state):
+    pin.value(state)
+    led_blink()  # Parpadeo del LED para indicar acción
+    await picoweb.start_response(resp)
+    await resp.awrite("OK")
+    
+async def velocidad_lenta(req, resp):
+    ena.duty(700)  # aproximadamente 40%
+    enb.duty(700)
+    led_blink()
+    await picoweb.start_response(resp)
+    await resp.awrite("Velocidad baja")
+
+async def velocidad_normal(req, resp):
+    ena.duty(1023)  # 100%
+    enb.duty(1023)
+    led_blink()
+    await picoweb.start_response(resp)
+    await resp.awrite("Velocidad normal")
+
+# Acciones con duración en segundos recibida por parámetro
+async def accion_con_duracion(req, resp, accion):
+    match = ure.search(r'segundos=(\d+)', req.qs or '')
+    segundos = int(match.group(1)) if match else 1  # por defecto 1 segundo
+    print("Ejecutando:", accion, "por", segundos, "segundos")
+
+    # Apagar todo antes de iniciar una acción
+    in1.value(0); in2.value(0); in3.value(0); in4.value(0)
+
+    if accion == "adelante":
+        in1.value(1); in3.value(1)
+    elif accion == "atras":
+        in2.value(1); in4.value(1)
+    elif accion == "izquierda":
+        in3.value(1)  # solo motor derecho
+    elif accion == "derecha":
+        in1.value(1)  # solo motor izquierdo
+    elif accion == "giro":
+        in1.value(1); in4.value(1)  # uno adelante y otro atrás
+
+    led_blink()
+    time.sleep(segundos)
+
+    # Apagar motores después del tiempo
+    in1.value(0); in2.value(0); in3.value(0); in4.value(0)
+
+    await picoweb.start_response(resp)
+    await resp.awrite("Acción completada: " + accion)
+
+
+ROUTES = [
+    ("/", index),
+    ("/video", video),
+
+    ("/motor/adelante", lambda req, resp: accion_con_duracion(req, resp, "adelante")),
+    ("/motor/atras", lambda req, resp: accion_con_duracion(req, resp, "atras")),
+    ("/motor/izquierda", lambda req, resp: accion_con_duracion(req, resp, "izquierda")),
+    ("/motor/derecha", lambda req, resp: accion_con_duracion(req, resp, "derecha")),
+    ("/motor/giro", lambda req, resp: accion_con_duracion(req, resp, "giro")),
+    
+    ("/motor/velocidad/lenta", velocidad_lenta),
+    ("/motor/velocidad/normal", velocidad_normal),
+]
+
+
+if __name__ == '__main__':
+    
+    import ulogging as logging
+    logging.basicConfig(level=logging.INFO)
+    iniciar_sistema()
+    camera_init()
+    wifi_connect()
+    iniciar_sistema()
+
+    #Create an app object that contains two decorators
+    app = picoweb.WebApp(__name__, ROUTES)
+    
+    app.run(debug=1, port=80, host="0.0.0.0")
+    # debug values:
+    # -1 disable all logging
+    # 0 (False) normal logging: requests and errors
+    # 1 (True) debug logging
+    # 2 extra debug logging

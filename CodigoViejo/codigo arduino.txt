@@ -1,0 +1,140 @@
+#include <WiFiS3.h>
+
+const char ssid[] = "✓-1phone de azael";
+const char pass[] = "internetyo";
+
+int status = WL_IDLE_STATUS;
+
+WiFiServer server(80);
+
+bool isOn = false;
+
+// Pines de motor
+const int in1 = 8;
+const int in2 = 7;
+const int in3 = 12;
+const int in4 = 13;
+const int ena = 3; // PWM
+const int enb = 5;  // PWM
+
+// LED indicador de recepción
+const int ledIndicador = 4;
+
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(in1, OUTPUT);
+  pinMode(in2, OUTPUT);
+  pinMode(in3, OUTPUT);
+  pinMode(in4, OUTPUT);
+  pinMode(ena, OUTPUT);
+  pinMode(enb, OUTPUT);
+  pinMode(ledIndicador, OUTPUT);
+
+  analogWrite(ena, 255); // Velocidad máxima
+  analogWrite(enb, 255);
+
+  String fv = WiFi.firmwareVersion();
+  if (fv < WIFI_FIRMWARE_LATEST_VERSION)
+    Serial.println("Please upgrade the firmware");
+
+  while (status != WL_CONNECTED) {
+    Serial.print("Attempting to connect to SSID: ");
+    Serial.println(ssid);
+    status = WiFi.begin(ssid, pass);
+    delay(10000);
+  }
+  server.begin();
+  printWifiStatus();
+}
+
+void detenerMotores() {
+  digitalWrite(in1, LOW);
+  digitalWrite(in2, LOW);
+  digitalWrite(in3, LOW);
+  digitalWrite(in4, LOW);
+}
+
+void mover(String accion, int duracion = 1000) {
+  detenerMotores();
+
+  if (accion == "adelante") {
+    digitalWrite(in1, HIGH);
+    digitalWrite(in3, HIGH);
+  } else if (accion == "atras") {
+    digitalWrite(in2, HIGH);
+    digitalWrite(in4, HIGH);
+  } else if (accion == "izquierda") {
+    digitalWrite(in3, HIGH);
+  } else if (accion == "derecha") {
+    digitalWrite(in1, HIGH);
+  } else if (accion == "giro") {
+    digitalWrite(in1, HIGH);
+    digitalWrite(in4, HIGH);
+  }
+
+  delay(duracion);
+  detenerMotores();
+}
+
+void parpadearLed() {
+  digitalWrite(ledIndicador, HIGH);
+  delay(200);
+  digitalWrite(ledIndicador, LOW);
+}
+
+void loop() {
+  WiFiClient client = server.available();
+  if (client) {
+    String request = "";
+    while (client.connected()) {
+      if (client.available()) {
+        char c = client.read();
+        request += c;
+        if (c == '\n' && request.endsWith("\r\n\r\n")) {
+          break;
+        }
+      }
+    }
+
+    parpadearLed(); // 🔴 Indica que se recibió una solicitud
+
+    // Control de motores desde URL
+    if (request.indexOf("GET /motor/adelante") >= 0) {
+      mover("adelante");
+    } else if (request.indexOf("GET /motor/atras") >= 0) {
+      mover("atras");
+    } else if (request.indexOf("GET /motor/izquierda") >= 0) {
+      mover("izquierda");
+    } else if (request.indexOf("GET /motor/derecha") >= 0) {
+      mover("derecha");
+    } else if (request.indexOf("GET /motor/giro") >= 0) {
+      mover("giro");
+    }
+
+    // Enviar respuesta HTTP
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: text/html");
+    client.println("Connection: close");
+    client.println();
+    client.println("<!DOCTYPE HTML><html>");
+    client.println("<h2>Control de Motores</h2>");
+    client.println("<p><a href=\"/motor/adelante\">Adelante</a></p>");
+    client.println("<p><a href=\"/motor/atras\">Atrás</a></p>");
+    client.println("<p><a href=\"/motor/izquierda\">Izquierda</a></p>");
+    client.println("<p><a href=\"/motor/derecha\">Derecha</a></p>");
+    client.println("<p><a href=\"/motor/giro\">Giro</a></p>");
+    client.println("</html>");
+
+    delay(10);
+    client.stop();
+  }
+}
+
+void printWifiStatus() {
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+  Serial.print("signal strength (RSSI):");
+  Serial.print(WiFi.RSSI());
+  Serial.println(" dBm");
+}
